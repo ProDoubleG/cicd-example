@@ -16,7 +16,10 @@ jobs:
 
       # 1. 도커 네트워크 생성 (앱과 테스트 컨테이너가 서로 통신하기 위해)
       - name: Create Network
-        run: docker network create test-net -or true
+        run: |
+          if (-not (docker network ls -q -f name=test-net)) {
+              docker network create test-net
+            }
 
       # 2. 테스트용 앱 이미지 빌드
       - name: Build App Image
