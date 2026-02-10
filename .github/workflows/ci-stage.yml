@@ -14,49 +14,54 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 1. [네트워크 생성] PowerShell에서 에러 없이 안전하게 만드는 방법
-      # "test-net이 없으면 만들고, 있으면 넘어가라"
+      # 1. 네트워크 생성
       - name: Create Network
         run: |
           if (-not (docker network ls -q -f name=test-net)) {
             docker network create test-net
           }
 
-      # 2. 이미지 빌드 (멀티 스테이지)
-      - name: Build Test Image
+      # 2. [수정] 서버용 이미지 빌드 (Target: production)
+      # 이 이미지는 'python main.py'를 실행하여 계속 켜져있게 됩니다.
+      - name: Build Production Image
         run: |
-          docker build --target test-image -t my-app:test -f app/Dockerfile .
+          docker build --target production -t my-app:prod -f app/Dockerfile .
 
-      # 3. 앱 컨테이너 실행
-      # --network test-net : 우리만의 랜선에 꽂기
-      # --name app-test    : 이 이름이 곧 도메인 주소가 됨
+      # 3. [수정] 테스트 러너 이미지 빌드 (Target: test-image)
+      # 이 이미지는 'pytest'를 실행하고 결과를 알려줍니다.
+      - name: Build Test Runner Image
+        run: |
+          docker build --target test-image -t my-app:tester -f app/Dockerfile .
+
+      # 4. [수정] 앱 컨테이너 실행 (Prod 이미지 사용!)
       - name: Run App Container
         run: |
           docker rm -f app-test 2> $null
-          docker run -d --name app-test --network test-net -p 5001:5000 my-app:test
+          # my-app:test 가 아니라 my-app:prod 를 실행해야 서버가 뜹니다!
+          docker run -d --name app-test --network test-net -p 5001:5000 my-app:prod
         continue-on-error: true
 
-      # 4. 서버 대기 (넉넉하게 5초)
+      # 5. 서버 대기
       - name: Wait for Server
         run: Start-Sleep -Seconds 5
 
-      # 5. [디버깅] 혹시 앱이 죽었는지 확인하기 위해 로그 출력
+      # 6. [디버깅] 진짜 살아있는지 로그로 확인 (이제 Up 상태여야 함)
       - name: Check App Status
-        run: docker ps -a | findstr app-test
+        run: |
+          echo "=== Container List ==="
+          docker ps -a
+          echo "=== App Logs ==="
+          docker logs app-test
 
-      # 6. [핵심] 테스트 실행 (컨테이너 간 통신)
-      # App_URL을 'http://app-test:5000'으로 설정해야 함 (내부 포트 사용!)
+      # 7. [수정] 테스트 실행 (Tester 이미지 사용!)
       - name: Run Tests
         run: |
           docker run --rm --network test-net `
             -e App_URL="http://app-test:5000" `
-            my-app:test
+            my-app:tester
 
-      # 7. 뒷정리
+      # 8. 뒷정리
       - name: Cleanup
         if: always()
-        run: |
-          docker rm -f app-test
-          # 네트워크는 다른 프로젝트랑 겹칠 수 있으니 굳이 삭제 안 해도 됨 (선택 사항)
-          # docker network rm test-net 
+        run: docker rm -f app-test
         continue-on-error: true
