@@ -46,6 +46,11 @@ jobs:
           $NewContainerName = "app-$TargetColor"
           $OldContainerName = "app-$OldColor"
 
+          if (-not $NewContainerName) {
+            Write-Error "CRITICAL ERROR: Container Name is empty!"
+            exit 1
+          }
+
           Write-Host "🔵 Current Active: $OldContainerName"
           Write-Host "🟢 Target Deploy: $NewContainerName (Port $TargetPort)"
 
