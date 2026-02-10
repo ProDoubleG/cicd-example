@@ -64,6 +64,7 @@ jobs:
             --network test-net `
             -p ${TargetPort}:5000 `
             --restart always `
+            -e Page_Title="Deployment Server" `
             my-app:prod
 
           # ----------------------------------------------------------------
@@ -80,6 +81,11 @@ jobs:
           # [중요] 님이 만드신 '그 폴더' 안에 있는 파일을 수정합니다.
           $NginxConfPath = "C:\Users\answn\workspace\cicd_practice\nginx\myapp.conf"
           
+          if (-not $NewContainerName) {
+              Write-Error "❌ Error: Container Name is empty! Aborting Nginx update."
+              exit 1
+          }
+
           # Nginx 설정 내용 작성
           # upstream 주소를 '컨테이너 이름'($NewContainerName)으로 변경합니다.
           # 같은 Docker Network 안에 있으므로 이름으로 통신 가능합니다.
@@ -112,7 +118,16 @@ jobs:
           # 리로드만 해주면 즉시 적용됩니다.
           
           Write-Host "Reloading Nginx..."
-          docker exec nginx-proxy nginx -s reload
+          docker exec nginx-proxy nginx -t
+
+          if ($LASTEXITCODE -eq 0) {
+              Write-Host "Configuration valid. Reloading Nginx..."
+              docker exec nginx-proxy nginx -s reload
+              Write-Host "Traffic Switched to $NewContainerName"
+          } else {
+              Write-Error "❌ Nginx configuration test failed! Not reloading."
+              exit 1
+          }
           
           Write-Host "Traffic Switched to $NewContainerName"
 
