@@ -78,7 +78,7 @@ jobs:
           # ----------------------------------------------------------------
           
           # [중요] 님이 만드신 '그 폴더' 안에 있는 파일을 수정합니다.
-          $NginxConfPath = "C:\Users\answn\workspace\cicd_practice\nginx"
+          $NginxConfPath = "C:\Users\answn\workspace\cicd_practice\nginx\myapp.conf"
           
           # Nginx 설정 내용 작성
           # upstream 주소를 '컨테이너 이름'($NewContainerName)으로 변경합니다.
