@@ -65,5 +65,6 @@ jobs:
         if: always()
         run: |
           if (docker ps -a -q -f name=app-test) {
+            docker stop app-test
             docker rm app-test
           }
