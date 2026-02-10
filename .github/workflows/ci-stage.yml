@@ -37,9 +37,12 @@ jobs:
       # 여기서 에러가 나면 바로 멈추고 이유를 알려줄 겁니다.
       - name: Run App Container
         run: |
-          docker rm -f app-test 2> $null
-          docker run -d --name app-test --network test-net -p 5001:5000 my-app:prod
+          if (docker ps -a -q -f name=app-test) {
+            Write-Host "Found existing container. Removing..."
+            docker rm app-test
+          }
 
+          docker run -d --name app-test --network test-net -p 5001:5000 my-app:prod
       # 6. 서버 대기
       - name: Wait for Server
         run: Start-Sleep -Seconds 5
@@ -60,5 +63,7 @@ jobs:
       # 9. 뒷정리
       - name: Cleanup
         if: always()
-        run: docker rm -f app-test
-        continue-on-error: true
+        run: |
+          if (docker ps -a -q -f name=app-test) {
+            docker rm app-test
+          }
