@@ -39,14 +39,17 @@ jobs:
         run: Start-Sleep -Seconds 5
 
       # 5. [핵심] 테스트 실행 (도커 안에서 pip 설치하고 실행)
-      - name: Run Tests in Docker
-        # 윈도우 경로 호환성을 위해 Powershell 변수 사용 ($PWD)
+      - name: Build Test Image
+        run: |
+          docker build --target test-image -t my-app:test -f app/Dockerfile .
+
+      # 2. 테스트 실행 (아주 간단해짐)
+      # 이미 테스트 코드와 라이브러리가 이미지 안에 다 들어있음!
+      - name: Run Tests
         run: |
           docker run --rm --network test-net `
-            -v "C:\Users\answn\workspace\cicd_practice\tests":/tests `
             -e App_URL="http://app-test:5000" `
-            python:3.9-slim `
-            /bin/bash -c "pip install pytest requests && pytest -v /tests/integration_test.py"
+            my-app:test
 
       # 6. 뒷정리
       - name: Cleanup
