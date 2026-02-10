@@ -29,16 +29,16 @@ jobs:
           # ----------------------------------------------------------------
           # [Step A] 타겟 결정
           # ----------------------------------------------------------------
-          Write-Host "🔍 Determining Deployment Target..."
+          Write-Host "Determining Deployment Target..."
 
           $BlueStatus = docker ps -q -f name=app-blue
           
           if ($BlueStatus) {
-            Write-Host "🔵 Blue is Active -> Target: Green"
+            Write-Host "Blue is Active -> Target: Green"
             $TargetColor = "green"
             $TargetPort = "5002"
           } else {
-            Write-Host "⚪ Blue is Inactive -> Target: Blue"
+            Write-Host "Blue is Inactive -> Target: Blue"
             $TargetColor = "blue"
             $TargetPort = "5001"
           }
@@ -48,7 +48,7 @@ jobs:
           # ----------------------------------------------------------------
           # [Step B] 배포 실행 (명찰: Deployment Server)
           # ----------------------------------------------------------------
-          Write-Host "🚀 Deploying $NewContainerName on port $TargetPort..."
+          Write-Host "    Deploying $NewContainerName on port $TargetPort..."
 
           # 기존 컨테이너 삭제
           if (docker ps -a -q -f name=$NewContainerName) {
@@ -63,7 +63,7 @@ jobs:
             --restart always `
             my-app:prod
 
-          Write-Host "⏳ Waiting for container initialization..."
+          Write-Host "    Waiting for container initialization..."
           Start-Sleep -Seconds 5
 
           # ----------------------------------------------------------------
@@ -72,12 +72,12 @@ jobs:
           
           # 깃헙에서 받아온 소스 파일 경로 (blue.conf 또는 green.conf)
           # $TargetColor 변수에 따라 blue.conf 혹은 green.conf가 선택됨
-          $SourceFile = "nginx\$TargetColor.conf"
+          $SourceFile = "nginx\templates\$TargetColor.conf"
           
           # 실제로 Nginx가 바라보고 있는 파일 경로 (덮어씌워질 파일)
           $DestFile = "C:\Users\answn\workspace\cicd_practice\nginx\myapp.conf"
           
-          Write-Host "📂 Copying Config: $SourceFile -> $DestFile"
+          Write-Host "    Copying Config: $SourceFile -> $DestFile"
           
           # [핵심] 파일 복사 (덮어쓰기)
           Copy-Item -Path $SourceFile -Destination $DestFile -Force
@@ -85,14 +85,14 @@ jobs:
           # ----------------------------------------------------------------
           # [Step D] Nginx Reload
           # ----------------------------------------------------------------
-          Write-Host "🔄 Reloading Nginx..."
+          Write-Host "    Reloading Nginx..."
           
           docker exec nginx-proxy nginx -t
           if ($LASTEXITCODE -eq 0) {
               docker exec nginx-proxy nginx -s reload
-              Write-Host "🎉 SUCCESS: Traffic switched to $NewContainerName"
+              Write-Host "    SUCCESS: Traffic switched to $NewContainerName"
           } else {
-              Write-Error "❌ Nginx Config Check Failed!"
+              Write-Error "    Nginx Config Check Failed!"
               exit 1
           }
 
