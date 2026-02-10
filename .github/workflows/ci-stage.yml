@@ -1,68 +1,44 @@
 name: CI - Integration Test
 
-# 언제 실행될지 정의 (Trigger)
+# Define when to run CI
 on:
   push:
-    branches: [ "stage" ]       # dev 브랜치에 코드가 올라오거나
+    branches: [ "stage" ]     # when pushed to stage branch
   pull_request:
-    branches: [ "stage" ]     # stage로 합치려고 PR을 날릴 때
+    branches: [ "stage" ]     # or whenever pull-request is sent to stage branch
 
 jobs:
   test:
-    # 가장 중요: GitHub 서버가 아니라 '내 컴퓨터'에서 실행함
+    # IMPORTANT : the test will run on LOCAL-COMPUTER using "runner"
     runs-on: self-hosted
 
     steps:
-      # 1. GitHub에 있는 코드를 내 컴퓨터 작업 폴더로 가져옴
-      - name: Checkout code
+      # Fetch codes from github
+      - name: Fetch code
         uses: actions/checkout@v3
 
-      # 2. 테스트용 도커 이미지 빌드
+      # Build image for test docker container
       - name: Build Test Image
         run: docker build -t my-app:test ./app
 
-      # 3. 테스트 컨테이너 실행 (포트 충돌 방지를 위해 5001번 사용)
-      # 1. 컨테이너 실행 (PowerShell 방식)
+      # Run test container using other port number(5000 is occupied for deployment)
+      # Powershell grammar
       - name: Run Test Container
         run: |
           if (docker ps -a -q -f name=app-test) { docker rm -f app-test }
           docker run -d --name app-test -p 5001:5000 my-app:test
 
-      # 2. 서버 대기 (PowerShell 방식)
+      # wait for server
       - name: Wait for Server
         run: Start-Sleep -Seconds 5
 
-      # 3. 테스트 로직 (완전한 PowerShell 문법)
-      - name: Execute Test Logic
+      # run test
+      - name: Run Integration Tests
         run: |
-          Write-Host "🧪 Testing Core Function..."
-          try {
-            $Response = Invoke-RestMethod -Uri "http://localhost:5001/core" -Method Get
-            Write-Host "   Response: $Response"
-            
-            if ($Response -eq "Success") {
-              Write-Host "   ✅ Core Function Passed!" -ForegroundColor Green
-            } else {
-              Write-Error "   ❌ Core Function Failed. Expected 'Success', got '$Response'"
-              exit 1
-            }
-          } catch {
-            Write-Error "   ❌ Connection Failed: $_"
-            exit 1
-          }
-
-          Write-Host "🧪 Testing Legacy Feature..."
-          try {
-            $Response = Invoke-RestMethod -Uri "http://localhost:5001/legacy" -Method Get
-            Write-Host "   Response: $Response"
-
-            if ($Response -eq "Response A") {
-              Write-Host "   ✅ Legacy Feature Passed!" -ForegroundColor Green
-            } else {
-              Write-Error "   ❌ Legacy Feature Failed. Expected 'Response A', got '$Response'"
-              exit 1
-            }
-          } catch {
-            Write-Error "   ❌ Connection Failed: $_"
-            exit 1
-          }
+          pip install pytest
+          pytest -v tests/integration_test.py
+          
+      - name: Cleanup
+        if: always()
+        run: docker rm -f app-test
+        continue-on-error: true
