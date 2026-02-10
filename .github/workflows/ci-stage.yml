@@ -3,7 +3,7 @@ name: CI - Integration Test
 # 언제 실행될지 정의 (Trigger)
 on:
   push:
-    branches: [ "dev" ]       # dev 브랜치에 코드가 올라오거나
+    branches: [ "stage" ]       # dev 브랜치에 코드가 올라오거나
   pull_request:
     branches: [ "stage" ]     # stage로 합치려고 PR을 날릴 때
 
