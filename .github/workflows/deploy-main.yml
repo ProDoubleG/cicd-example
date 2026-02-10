@@ -27,55 +27,35 @@ jobs:
       - name: Blue/Green Deployment Strategy
         run: |
           # ----------------------------------------------------------------
-          # [Step A] 타겟 결정 (누가 범인인가?)
+          # [Step A] 타겟 결정
           # ----------------------------------------------------------------
-          Write-Host "----------------------------------------"
-          Write-Host "🔍 [DEBUG] Starting Deployment Logic..."
+          Write-Host "🔍 Determining Deployment Target..."
 
-          # 현재 실행 중인 컨테이너 ID 확인
-          $BlueID = docker ps -q -f name=app-blue
-          $GreenID = docker ps -q -f name=app-green
+          $BlueStatus = docker ps -q -f name=app-blue
           
-          Write-Host "   - Blue Container ID: '$BlueID'"
-          Write-Host "   - Green Container ID: '$GreenID'"
-
-          # 로직: Blue가 살아있으면 Green으로, 아니면 Blue로
-          if ($BlueID) {
+          if ($BlueStatus) {
+            Write-Host "🔵 Blue is Active -> Target: Green"
             $TargetColor = "green"
             $TargetPort = "5002"
-            $OldColor = "blue"
           } else {
-            # Blue가 없거나 죽어있으면 무조건 Blue 배포 (기본값)
+            Write-Host "⚪ Blue is Inactive -> Target: Blue"
             $TargetColor = "blue"
             $TargetPort = "5001"
-            $OldColor = "green"
           }
 
           $NewContainerName = "app-$TargetColor"
-          $OldContainerName = "app-$OldColor"
-
+          
           # ----------------------------------------------------------------
-          # [Step B] 안전장치 (변수 검증)
+          # [Step B] 배포 실행 (명찰: Deployment Server)
           # ----------------------------------------------------------------
-          # 만약 변수가 비어있다면 즉시 에러를 내고 멈춤
-          if ([string]::IsNullOrWhiteSpace($NewContainerName)) {
-            Write-Error "❌ FATAL ERROR: Target Container Name is EMPTY!"
-            exit 1
-          }
+          Write-Host "🚀 Deploying $NewContainerName on port $TargetPort..."
 
-          Write-Host "✅ Target Decided: $NewContainerName (Port $TargetPort)"
-          Write-Host "----------------------------------------"
-
-          # ----------------------------------------------------------------
-          # [Step C] 새 컨테이너 배포
-          # ----------------------------------------------------------------
-          Write-Host "🚀 Deploying $NewContainerName..."
-
+          # 기존 컨테이너 삭제
           if (docker ps -a -q -f name=$NewContainerName) {
             docker rm -f $NewContainerName
           }
 
-          # [페이지 제목 환경변수 추가됨]
+          # 새 컨테이너 실행
           docker run -d --name $NewContainerName `
             --network test-net `
             -p ${TargetPort}:5000 `
@@ -83,65 +63,48 @@ jobs:
             --restart always `
             my-app:prod
 
-          Write-Host "⏳ Waiting for container to initialize..."
+          Write-Host "⏳ Waiting for container initialization..."
           Start-Sleep -Seconds 5
 
           # ----------------------------------------------------------------
-          # [Step D] Nginx 설정 파일 교체 (문자열 조합 방식 변경)
+          # [Step C] 설정 파일 교체 (Write가 아니라 Copy!)
           # ----------------------------------------------------------------
-          $NginxConfPath = "C:\Users\answn\workspace\cicd_practice\nginx\myapp.conf"
           
-          # [중요] 변수를 문자열 밖에서 미리 조합하여 오타/인식 오류 방지
-          $UpstreamServer = "server $NewContainerName:5000;"
+          # 깃헙에서 받아온 소스 파일 경로 (blue.conf 또는 green.conf)
+          # $TargetColor 변수에 따라 blue.conf 혹은 green.conf가 선택됨
+          $SourceFile = "nginx\$TargetColor.conf"
           
-          # 내용 작성
-          $NewConfigContent = @"
-          upstream backend {
-              $UpstreamServer
-          }
-
-          server {
-              listen 80;
-              server_name localhost;
-
-              location / {
-                  proxy_pass http://backend;
-                  proxy_set_header Host `$host;
-                  proxy_set_header X-Real-IP `$remote_addr;
-                  proxy_set_header X-Forwarded-For `$proxy_add_x_forwarded_for;
-              }
-          }
-          "@
-
-          # [디버깅] 실제로 파일에 쓰일 내용을 화면에 보여줌
-          Write-Host "📄 [DEBUG] Writing Nginx Config Content:"
-          Write-Host $NewConfigContent
-          Write-Host "----------------------------------------"
-
-          Set-Content -Path $NginxConfPath -Value $NewConfigContent -Encoding Ascii
-          Write-Host "Updated Nginx config at $NginxConfPath"
+          # 실제로 Nginx가 바라보고 있는 파일 경로 (덮어씌워질 파일)
+          $DestFile = "C:\Users\answn\workspace\cicd_practice\nginx\myapp.conf"
+          
+          Write-Host "📂 Copying Config: $SourceFile -> $DestFile"
+          
+          # [핵심] 파일 복사 (덮어쓰기)
+          Copy-Item -Path $SourceFile -Destination $DestFile -Force
 
           # ----------------------------------------------------------------
-          # [Step E] Nginx Reload (무중단 스위칭)
+          # [Step D] Nginx Reload
           # ----------------------------------------------------------------
-          Write-Host "Testing Nginx configuration..."
+          Write-Host "🔄 Reloading Nginx..."
+          
           docker exec nginx-proxy nginx -t
-          
           if ($LASTEXITCODE -eq 0) {
-              Write-Host "Configuration valid. Reloading Nginx..."
               docker exec nginx-proxy nginx -s reload
-              Write-Host "🎉 Traffic Switched to $NewContainerName"
+              Write-Host "🎉 SUCCESS: Traffic switched to $NewContainerName"
           } else {
-              Write-Error "❌ Nginx configuration test failed! Not reloading."
-              # 설정 파일이 잘못되었으므로 이전 컨테이너를 살려두기 위해 여기서 멈춤
+              Write-Error "❌ Nginx Config Check Failed!"
               exit 1
           }
 
           # ----------------------------------------------------------------
-          # [Step F] 구버전 컨테이너 삭제
+          # [Step E] 구버전 삭제 (선택 사항)
           # ----------------------------------------------------------------
+          # 반대편 색깔 구하기
+          if ($TargetColor -eq "blue") { $OldColor = "green" } else { $OldColor = "blue" }
+          $OldContainerName = "app-$OldColor"
+
           if (docker ps -a -q -f name=$OldContainerName) {
-            Write-Host "Removing old container: $OldContainerName"
+            Write-Host "🗑️ Removing old container: $OldContainerName"
             docker stop $OldContainerName
             docker rm $OldContainerName
           }
