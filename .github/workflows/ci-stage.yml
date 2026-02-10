@@ -14,49 +14,49 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 1. 도커 네트워크 생성 (앱과 테스트 컨테이너가 서로 통신하기 위해)
+      # 1. [네트워크 생성] PowerShell에서 에러 없이 안전하게 만드는 방법
+      # "test-net이 없으면 만들고, 있으면 넘어가라"
       - name: Create Network
         run: |
           if (-not (docker network ls -q -f name=test-net)) {
-              docker network create test-net
-            }
+            docker network create test-net
+          }
 
-      # 2. 테스트용 앱 이미지 빌드
-      - name: Build App Image
-      # -f app/Dockerfile : 설계도는 app 폴더 안에 있는 걸 쓸 거야
-      # 하지만 파일은 이 프로젝트 전체 루트에서 찾을 거야
-        run: docker build --target test-image -t my-app:test -f app/Dockerfile .
-
-      # 3. 앱 컨테이너 실행 (test-net 네트워크에 연결!)
-      - name: Run App Container
-        run: |
-          docker rm -f app-test
-          # --network test-net: 네트워크 연결
-          # --name app-test: 이 이름으로 접속 가능
-          docker run -d --name app-test --network test-net -p 5001:5000 my-app:test
-        continue-on-error: true
-
-      # 4. 서버 뜰 때까지 대기
-      - name: Wait for Server
-        run: Start-Sleep -Seconds 5
-
-      # 5. [핵심] 테스트 실행 (도커 안에서 pip 설치하고 실행)
+      # 2. 이미지 빌드 (멀티 스테이지)
       - name: Build Test Image
         run: |
           docker build --target test-image -t my-app:test -f app/Dockerfile .
 
-      # 2. 테스트 실행 (아주 간단해짐)
-      # 이미 테스트 코드와 라이브러리가 이미지 안에 다 들어있음!
+      # 3. 앱 컨테이너 실행
+      # --network test-net : 우리만의 랜선에 꽂기
+      # --name app-test    : 이 이름이 곧 도메인 주소가 됨
+      - name: Run App Container
+        run: |
+          docker rm -f app-test 2> $null
+          docker run -d --name app-test --network test-net -p 5001:5000 my-app:test
+        continue-on-error: true
+
+      # 4. 서버 대기 (넉넉하게 5초)
+      - name: Wait for Server
+        run: Start-Sleep -Seconds 5
+
+      # 5. [디버깅] 혹시 앱이 죽었는지 확인하기 위해 로그 출력
+      - name: Check App Status
+        run: docker ps -a | findstr app-test
+
+      # 6. [핵심] 테스트 실행 (컨테이너 간 통신)
+      # App_URL을 'http://app-test:5000'으로 설정해야 함 (내부 포트 사용!)
       - name: Run Tests
         run: |
           docker run --rm --network test-net `
             -e App_URL="http://app-test:5000" `
             my-app:test
 
-      # 6. 뒷정리
+      # 7. 뒷정리
       - name: Cleanup
         if: always()
         run: |
           docker rm -f app-test
-          docker network rm test-net
+          # 네트워크는 다른 프로젝트랑 겹칠 수 있으니 굳이 삭제 안 해도 됨 (선택 사항)
+          # docker network rm test-net 
         continue-on-error: true
