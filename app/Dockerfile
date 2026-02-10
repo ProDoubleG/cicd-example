@@ -20,7 +20,7 @@ RUN pip install pytest requests
 # (중요) 루트에 있는 tests 폴더를 컨테이너 안으로 복사
 COPY tests/ /tests
 # 실행 명령어를 테스트 실행으로 변경
-CMD ["pytest", "-v", "/tests/integration_test.py"]
+CMD ["pytest", "-v", "/tests/ci_test.py"]
 
 # ---------------------------------------------------
 
