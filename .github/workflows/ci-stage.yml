@@ -1,4 +1,28 @@
-# 1. 컨테이너 실행 (PowerShell 방식)
+name: CI - Integration Test
+
+# 언제 실행될지 정의 (Trigger)
+on:
+  push:
+    branches: [ "stage" ]       # dev 브랜치에 코드가 올라오거나
+  pull_request:
+    branches: [ "stage" ]     # stage로 합치려고 PR을 날릴 때
+
+jobs:
+  test:
+    # 가장 중요: GitHub 서버가 아니라 '내 컴퓨터'에서 실행함
+    runs-on: self-hosted
+
+    steps:
+      # 1. GitHub에 있는 코드를 내 컴퓨터 작업 폴더로 가져옴
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. 테스트용 도커 이미지 빌드
+      - name: Build Test Image
+        run: docker build -t my-app:test ./app
+
+      # 3. 테스트 컨테이너 실행 (포트 충돌 방지를 위해 5001번 사용)
+      # 1. 컨테이너 실행 (PowerShell 방식)
       - name: Run Test Container
         run: |
           docker rm -f app-test 2> $null
@@ -11,34 +35,34 @@
       # 3. 테스트 로직 (완전한 PowerShell 문법)
       - name: Execute Test Logic
         run: |
-          Write-Host "Testing Core Function..."
+          Write-Host "🧪 Testing Core Function..."
           try {
             $Response = Invoke-RestMethod -Uri "http://localhost:5001/core" -Method Get
             Write-Host "   Response: $Response"
             
             if ($Response -eq "Success") {
-              Write-Host "   Core Function Passed!" -ForegroundColor Green
+              Write-Host "   ✅ Core Function Passed!" -ForegroundColor Green
             } else {
-              Write-Error "   Core Function Failed. Expected 'Success', got '$Response'"
+              Write-Error "   ❌ Core Function Failed. Expected 'Success', got '$Response'"
               exit 1
             }
           } catch {
-            Write-Error "   Connection Failed: $_"
+            Write-Error "   ❌ Connection Failed: $_"
             exit 1
           }
 
-          Write-Host "Testing Legacy Feature..."
+          Write-Host "🧪 Testing Legacy Feature..."
           try {
             $Response = Invoke-RestMethod -Uri "http://localhost:5001/legacy" -Method Get
             Write-Host "   Response: $Response"
 
             if ($Response -eq "Response A") {
-              Write-Host "   Legacy Feature Passed!" -ForegroundColor Green
+              Write-Host "   ✅ Legacy Feature Passed!" -ForegroundColor Green
             } else {
-              Write-Error "   Legacy Feature Failed. Expected 'Response A', got '$Response'"
+              Write-Error "   ❌ Legacy Feature Failed. Expected 'Response A', got '$Response'"
               exit 1
             }
           } catch {
-            Write-Error "   Connection Failed: $_"
+            Write-Error "   ❌ Connection Failed: $_"
             exit 1
           }
