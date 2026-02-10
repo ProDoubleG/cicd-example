@@ -39,6 +39,7 @@ jobs:
         run: |
           if (docker ps -a -q -f name=app-test) {
             Write-Host "Found existing container. Removing..."
+            docker stop app-test
             docker rm app-test
           }
 
