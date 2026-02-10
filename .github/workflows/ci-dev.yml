@@ -25,7 +25,7 @@ jobs:
       - name: Run Test Container
         run: |
           # 혹시 기존에 찌꺼기가 있으면 삭제
-          docker rm -f app-test || true
+          docker rm -f app-test -or true
           # 백그라운드 실행 (-d)
           docker run -d --name app-test -p 5001:5000 my-app:test
 
