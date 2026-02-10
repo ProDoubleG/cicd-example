@@ -27,17 +27,25 @@ jobs:
       - name: Blue/Green Deployment Strategy
         run: |
           # ----------------------------------------------------------------
-          # [Step A] 현재 실행 중인 컨테이너 확인 (누가 범인인가?)
+          # [Step A] 타겟 결정 (누가 범인인가?)
           # ----------------------------------------------------------------
-          # app-blue가 살아있으면 -> 다음 타겟은 Green
-          # app-green이 살아있거나 둘 다 없으면 -> 다음 타겟은 Blue (기본값)
+          Write-Host "----------------------------------------"
+          Write-Host "🔍 [DEBUG] Starting Deployment Logic..."
+
+          # 현재 실행 중인 컨테이너 ID 확인
+          $BlueID = docker ps -q -f name=app-blue
+          $GreenID = docker ps -q -f name=app-green
           
-          $BlueStatus = docker ps -q -f name=app-blue
-          if ($BlueStatus) {
+          Write-Host "   - Blue Container ID: '$BlueID'"
+          Write-Host "   - Green Container ID: '$GreenID'"
+
+          # 로직: Blue가 살아있으면 Green으로, 아니면 Blue로
+          if ($BlueID) {
             $TargetColor = "green"
             $TargetPort = "5002"
             $OldColor = "blue"
           } else {
+            # Blue가 없거나 죽어있으면 무조건 Blue 배포 (기본값)
             $TargetColor = "blue"
             $TargetPort = "5001"
             $OldColor = "green"
@@ -46,57 +54,50 @@ jobs:
           $NewContainerName = "app-$TargetColor"
           $OldContainerName = "app-$OldColor"
 
-          if (-not $NewContainerName) {
-            Write-Error "CRITICAL ERROR: Container Name is empty!"
+          # ----------------------------------------------------------------
+          # [Step B] 안전장치 (변수 검증)
+          # ----------------------------------------------------------------
+          # 만약 변수가 비어있다면 즉시 에러를 내고 멈춤
+          if ([string]::IsNullOrWhiteSpace($NewContainerName)) {
+            Write-Error "❌ FATAL ERROR: Target Container Name is EMPTY!"
             exit 1
           }
 
-          Write-Host "🔵 Current Active: $OldContainerName"
-          Write-Host "🟢 Target Deploy: $NewContainerName (Port $TargetPort)"
+          Write-Host "✅ Target Decided: $NewContainerName (Port $TargetPort)"
+          Write-Host "----------------------------------------"
 
           # ----------------------------------------------------------------
-          # [Step B] 새 컨테이너 배포
+          # [Step C] 새 컨테이너 배포
           # ----------------------------------------------------------------
-          
-          # 혹시 남아있을지 모르는 좀비 컨테이너 삭제
+          Write-Host "🚀 Deploying $NewContainerName..."
+
           if (docker ps -a -q -f name=$NewContainerName) {
             docker rm -f $NewContainerName
           }
 
-          # 새 컨테이너 실행
-          # --network test-net: Nginx와 같은 네트워크 필수!
+          # [페이지 제목 환경변수 추가됨]
           docker run -d --name $NewContainerName `
             --network test-net `
             -p ${TargetPort}:5000 `
-            --restart always `
             -e Page_Title="Deployment Server" `
+            --restart always `
             my-app:prod
 
-          # ----------------------------------------------------------------
-          # [Step C] 헬스 체크 (서버가 뜰 때까지 대기)
-          # ----------------------------------------------------------------
-          Write-Host "Waiting for new container to initialize..."
-          Start-Sleep -Seconds 10
-          
+          Write-Host "⏳ Waiting for container to initialize..."
+          Start-Sleep -Seconds 5
 
           # ----------------------------------------------------------------
-          # [Step D] Nginx 설정 파일 교체 (Host 파일 덮어쓰기)
+          # [Step D] Nginx 설정 파일 교체 (문자열 조합 방식 변경)
           # ----------------------------------------------------------------
-          
-          # [중요] 님이 만드신 '그 폴더' 안에 있는 파일을 수정합니다.
           $NginxConfPath = "C:\Users\answn\workspace\cicd_practice\nginx\myapp.conf"
           
-          if (-not $NewContainerName) {
-              Write-Error "❌ Error: Container Name is empty! Aborting Nginx update."
-              exit 1
-          }
-
-          # Nginx 설정 내용 작성
-          # upstream 주소를 '컨테이너 이름'($NewContainerName)으로 변경합니다.
-          # 같은 Docker Network 안에 있으므로 이름으로 통신 가능합니다.
+          # [중요] 변수를 문자열 밖에서 미리 조합하여 오타/인식 오류 방지
+          $UpstreamServer = "server $NewContainerName:5000;"
+          
+          # 내용 작성
           $NewConfigContent = @"
           upstream backend {
-              server $NewContainerName:5000;
+              $UpstreamServer
           }
 
           server {
@@ -112,29 +113,29 @@ jobs:
           }
           "@
 
-          # 파일 덮어쓰기 (인코딩 주의)
+          # [디버깅] 실제로 파일에 쓰일 내용을 화면에 보여줌
+          Write-Host "📄 [DEBUG] Writing Nginx Config Content:"
+          Write-Host $NewConfigContent
+          Write-Host "----------------------------------------"
+
           Set-Content -Path $NginxConfPath -Value $NewConfigContent -Encoding Ascii
-          Write-Host "Updated Nginx config at $NginxConfPath pointing to $NewContainerName"
+          Write-Host "Updated Nginx config at $NginxConfPath"
 
           # ----------------------------------------------------------------
-          # [Step E] Nginx Reload (무중단 스위칭!)
+          # [Step E] Nginx Reload (무중단 스위칭)
           # ----------------------------------------------------------------
-          # 폴더 마운트가 되어있으므로, 파일이 바뀐 걸 Nginx도 볼 수 있습니다.
-          # 리로드만 해주면 즉시 적용됩니다.
-          
-          Write-Host "Reloading Nginx..."
+          Write-Host "Testing Nginx configuration..."
           docker exec nginx-proxy nginx -t
-
+          
           if ($LASTEXITCODE -eq 0) {
               Write-Host "Configuration valid. Reloading Nginx..."
               docker exec nginx-proxy nginx -s reload
-              Write-Host "Traffic Switched to $NewContainerName"
+              Write-Host "🎉 Traffic Switched to $NewContainerName"
           } else {
               Write-Error "❌ Nginx configuration test failed! Not reloading."
+              # 설정 파일이 잘못되었으므로 이전 컨테이너를 살려두기 위해 여기서 멈춤
               exit 1
           }
-          
-          Write-Host "Traffic Switched to $NewContainerName"
 
           # ----------------------------------------------------------------
           # [Step F] 구버전 컨테이너 삭제
