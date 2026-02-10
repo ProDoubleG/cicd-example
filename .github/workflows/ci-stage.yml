@@ -25,7 +25,7 @@ jobs:
       # 1. 컨테이너 실행 (PowerShell 방식)
       - name: Run Test Container
         run: |
-          docker rm -f app-test 2> $null
+          if (docker ps -a -q -f name=app-test) { docker rm -f app-test }
           docker run -d --name app-test -p 5001:5000 my-app:test
 
       # 2. 서버 대기 (PowerShell 방식)
