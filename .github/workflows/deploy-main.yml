@@ -1,0 +1,126 @@
+name: CD - Blue/Green Deployment (Main)
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy-blue-green:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 1. 네트워크 생성 (이미 있으면 통과)
+      - name: Create Network
+        run: |
+          if (-not (docker network ls -q -f name=test-net)) {
+            docker network create test-net
+          }
+
+      # 2. 프로덕션 이미지 빌드
+      - name: Build Production Image
+        run: docker build --target production -t my-app:prod -f app/Dockerfile .
+
+      # 3. [핵심] Blue/Green 배포 전략 실행
+      - name: Blue/Green Deployment Strategy
+        run: |
+          # ----------------------------------------------------------------
+          # [Step A] 현재 실행 중인 컨테이너 확인 (누가 범인인가?)
+          # ----------------------------------------------------------------
+          # app-blue가 살아있으면 -> 다음 타겟은 Green
+          # app-green이 살아있거나 둘 다 없으면 -> 다음 타겟은 Blue (기본값)
+          
+          $BlueStatus = docker ps -q -f name=app-blue
+          if ($BlueStatus) {
+            $TargetColor = "green"
+            $TargetPort = "5002"
+            $OldColor = "blue"
+          } else {
+            $TargetColor = "blue"
+            $TargetPort = "5001"
+            $OldColor = "green"
+          }
+
+          $NewContainerName = "app-$TargetColor"
+          $OldContainerName = "app-$OldColor"
+
+          Write-Host "🔵 Current Active: $OldContainerName"
+          Write-Host "🟢 Target Deploy: $NewContainerName (Port $TargetPort)"
+
+          # ----------------------------------------------------------------
+          # [Step B] 새 컨테이너 배포
+          # ----------------------------------------------------------------
+          
+          # 혹시 남아있을지 모르는 좀비 컨테이너 삭제
+          if (docker ps -a -q -f name=$NewContainerName) {
+            docker rm -f $NewContainerName
+          }
+
+          # 새 컨테이너 실행
+          # --network test-net: Nginx와 같은 네트워크 필수!
+          docker run -d --name $NewContainerName `
+            --network test-net `
+            -p ${TargetPort}:5000 `
+            --restart always `
+            my-app:prod
+
+          # ----------------------------------------------------------------
+          # [Step C] 헬스 체크 (서버가 뜰 때까지 대기)
+          # ----------------------------------------------------------------
+          Write-Host "Waiting for new container to initialize..."
+          Start-Sleep -Seconds 10
+          
+
+          # ----------------------------------------------------------------
+          # [Step D] Nginx 설정 파일 교체 (Host 파일 덮어쓰기)
+          # ----------------------------------------------------------------
+          
+          # [중요] 님이 만드신 '그 폴더' 안에 있는 파일을 수정합니다.
+          $NginxConfPath = "C:\Users\answn\workspace\cicd_practice\nginx"
+          
+          # Nginx 설정 내용 작성
+          # upstream 주소를 '컨테이너 이름'($NewContainerName)으로 변경합니다.
+          # 같은 Docker Network 안에 있으므로 이름으로 통신 가능합니다.
+          $NewConfigContent = @"
+          upstream backend {
+              server $NewContainerName:5000;
+          }
+
+          server {
+              listen 80;
+              server_name localhost;
+
+              location / {
+                  proxy_pass http://backend;
+                  proxy_set_header Host `$host;
+                  proxy_set_header X-Real-IP `$remote_addr;
+                  proxy_set_header X-Forwarded-For `$proxy_add_x_forwarded_for;
+              }
+          }
+          "@
+
+          # 파일 덮어쓰기 (인코딩 주의)
+          Set-Content -Path $NginxConfPath -Value $NewConfigContent -Encoding Ascii
+          Write-Host "Updated Nginx config at $NginxConfPath pointing to $NewContainerName"
+
+          # ----------------------------------------------------------------
+          # [Step E] Nginx Reload (무중단 스위칭!)
+          # ----------------------------------------------------------------
+          # 폴더 마운트가 되어있으므로, 파일이 바뀐 걸 Nginx도 볼 수 있습니다.
+          # 리로드만 해주면 즉시 적용됩니다.
+          
+          Write-Host "Reloading Nginx..."
+          docker exec nginx-proxy nginx -s reload
+          
+          Write-Host "Traffic Switched to $NewContainerName"
+
+          # ----------------------------------------------------------------
+          # [Step F] 구버전 컨테이너 삭제
+          # ----------------------------------------------------------------
+          if (docker ps -a -q -f name=$OldContainerName) {
+            Write-Host "Removing old container: $OldContainerName"
+            docker stop $OldContainerName
+            docker rm $OldContainerName
+          }
