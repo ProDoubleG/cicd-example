@@ -43,7 +43,7 @@ jobs:
         # 윈도우 경로 호환성을 위해 Powershell 변수 사용 ($PWD)
         run: |
           docker run --rm --network test-net `
-            -v ${PWD}/tests:/tests `
+            -v "C:\Users\answn\workspace\cicd_practice\tests":/tests `
             -e App_URL="http://app-test:5000" `
             python:3.9-slim `
             /bin/bash -c "pip install pytest requests && pytest -v /tests/integration_test.py"
