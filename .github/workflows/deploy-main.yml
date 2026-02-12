@@ -13,18 +13,18 @@ jobs:
         uses: actions/checkout@v3
 
       # 1. 네트워크 생성 (이미 있으면 통과)
-      - name: Create Network
+      - name: 1. Create Network
         run: |
           if (-not (docker network ls -q -f name=test-net)) {
             docker network create test-net
           }
 
       # 2. 프로덕션 이미지 빌드
-      - name: Build Production Image
+      - name: 2. Build Production Image
         run: docker build --target production -t my-app:prod -f app/Dockerfile .
 
       # 3. [핵심] Blue/Green 배포 전략 실행
-      - name: Blue/Green Deployment Strategy
+      - name: 3. Blue/Green Deployment Strategy
         run: |
           # ----------------------------------------------------------------
           # [Step A] 타겟 결정
@@ -46,44 +46,77 @@ jobs:
           $NewContainerName = "app-$TargetColor"
           
           # ----------------------------------------------------------------
-          # [Step B] 배포 실행 (명찰: Deployment Server)
+          # [Step B] 배포 실행 (신규 컨테이너 정리 및 기동)
           # ----------------------------------------------------------------
           Write-Host "    Deploying $NewContainerName on port $TargetPort..."
 
-          # 기존 컨테이너 삭제
+          # 켜져있는 컨테이너 목록에 있는지 검사
+          if (docker ps -q -f name=$NewContainerName) {
+              Write-Host "    Found pre-existing $NewContainerName active. Stopping..."
+              docker stop $NewContainerName
+              docker rm   $NewContainerName
+          }
+
+          # 꺼져있는 컨테이너 목록에 있는지 검사
           if (docker ps -a -q -f name=$NewContainerName) {
-            docker rm -f $NewContainerName
+            Write-Host "    Found pre-existing $NewContainerName inactive. Removing..."
+            docker rm $NewContainerName
           }
 
           # 새 컨테이너 실행
           docker run -d --name $NewContainerName `
             --network test-net `
             -p ${TargetPort}:5000 `
-            -e Page_Title="Deployment Server" `
+            -e Page_Title="Deployment Server ($TargetColor)" `
             --restart always `
             my-app:prod
 
-          Write-Host "    Waiting for container initialization..."
-          Start-Sleep -Seconds 5
+          # ----------------------------------------------------------------
+          # [Step C] 신규 컨테이너 헬스 체크
+          # ----------------------------------------------------------------
+          Write-Host "    Verifying service health..."
+          $Retries = 0
+          $Success = $false
+
+          while ($Retries -lt 10) {
+            try {
+              $Response = Invoke-WebRequest -Uri "http://localhost:${TargetPort}/core" -UseBasicParsing
+              if ($Response.StatusCode -eq 200) {
+                Write-Host "     Host is UP"
+                $Success = $true
+                break
+              }
+            } catch {
+                Write-Host "    Waiting for service... ($($Retries + 1)/10)"
+                Start-Sleep -Seconds 3
+                $Retries ++
+              }
+          }
+
+          if (-not $Success) {
+            Write-Error "    Health Check Failed! Aborting Deployment."
+            docker stop $NewContainerName
+            exit 1
+          }
 
           # ----------------------------------------------------------------
-          # [Step C] 설정 파일 교체 (Write가 아니라 Copy!)
+          # [Step D] Nginx 상태 확인 및 설정 파일 교체
           # ----------------------------------------------------------------
-          
-          # 깃헙에서 받아온 소스 파일 경로 (blue.conf 또는 green.conf)
-          # $TargetColor 변수에 따라 blue.conf 혹은 green.conf가 선택됨
+          Write-Host "    Checking Nginx Proxy Status..."
+          $NginxStatus = docker ps -q -f name=nginx-proxy
+          if (-not $NginxStatus) {
+              Write-Error "CRITICAL: nginx-proxy container is not running!"
+              exit 1
+          }
+
           $SourceFile = "nginx\templates\$TargetColor.conf"
-          
-          # 실제로 Nginx가 바라보고 있는 파일 경로 (덮어씌워질 파일)
           $DestFile = "C:\Users\answn\workspace\cicd_practice\nginx\myapp.conf"
           
           Write-Host "    Copying Config: $SourceFile -> $DestFile"
-          
-          # [핵심] 파일 복사 (덮어쓰기)
           Copy-Item -Path $SourceFile -Destination $DestFile -Force
 
           # ----------------------------------------------------------------
-          # [Step D] Nginx Reload
+          # [Step E] Nginx Reload
           # ----------------------------------------------------------------
           Write-Host "    Reloading Nginx..."
           
@@ -97,14 +130,36 @@ jobs:
           }
 
           # ----------------------------------------------------------------
-          # [Step E] 구버전 삭제 (선택 사항)
+          # [Step F] 최종 서비스 검증 (Nginx 트래픽 전환 확인)
           # ----------------------------------------------------------------
-          # 반대편 색깔 구하기
+          Write-Host "    Final Verification via Nginx (Port 80)..."
+          Start-Sleep -Seconds 2
+          $FinalResponse = Invoke-WebRequest -Uri "http://localhost/core" -UseBasicParsing
+          if ($FinalResponse.StatusCode -eq 200) {
+              Write-Host "    COMPLETE: Service is live on $TargetColor via Nginx!"
+          } else {
+              Write-Error "    CRITICAL: Nginx is not responding correctly after switch!"
+              exit 1
+          }
+
+          # ----------------------------------------------------------------
+          # [Step G] 구버전 삭제 (성공 시에만 실행)
+          # ----------------------------------------------------------------
           if ($TargetColor -eq "blue") { $OldColor = "green" } else { $OldColor = "blue" }
           $OldContainerName = "app-$OldColor"
 
+          Write-Host "Searching deprecated app..."
+
+          if (docker ps -q -f name=$OldContainerName) {
+              Write-Host "    Found deprecated $OldContainerName active..."
+              Write-Host "    Removing deprecated $OldContainerName..."
+              docker stop $OldContainerName
+              docker rm $OldContainerName
+          }
+
+          # 꺼져있는 컨테이너 목록에 $OldContainerName 있는지 검사
           if (docker ps -a -q -f name=$OldContainerName) {
-            Write-Host "🗑️ Removing old container: $OldContainerName"
-            docker stop $OldContainerName
+            Write-Host "    Found deprecated $OldContainerName inactive..."
+            Write-Host "    Removing deprecated $OldContainerName..."
             docker rm $OldContainerName
           }
