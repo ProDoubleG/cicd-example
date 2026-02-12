@@ -18,6 +18,10 @@ def core_function():
 def legacy_feature():
     return "Response A"
 
+@app.route('/new-feature')
+def new_feature():
+    return "Fail", 500
+
 if __name__ == '__main__':
     # 5000번 포트에서 실행, 외부 접속 허용(0.0.0.0)
     app.run(host='0.0.0.0', port=5000)
