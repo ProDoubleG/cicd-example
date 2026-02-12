@@ -29,7 +29,7 @@ def legacy_feature():
 @app.route('/new-feature')
 def new_feature():
     global core_response
-    core_response = "Fail" 
+    core_response = "Fail"
     return "Response B"
 # -----------------------------------------------
 

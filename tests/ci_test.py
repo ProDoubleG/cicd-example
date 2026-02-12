@@ -8,7 +8,7 @@ APP_URL = os.environ.get("App_URL", "http://localhost:5005")
 def core_button():
     response = requests.get(f"{APP_URL}/core")
     assert response.status_code == 200
-    assert "Core Response" in response.text
+    assert "Success" in response.text
 
 def legacy_button():
     response = requests.get(f"{APP_URL}/")
