@@ -27,4 +27,5 @@ CMD ["pytest", "-v", "/tests/ci_test.py"]
 # [3단계: 배포용 이미지 (최종)]
 # 테스트 코드는 빼고, 순수하게 앱만 실행하는 단계
 FROM base as production
+WORKDIR /app
 CMD ["python", "main.py"]

@@ -36,7 +36,7 @@ def legacy_feature():
 
 #------------- Scenario C ---------------------
 @app.route('/new-feature')
-def legacy_feature():
+def new_feature():
     return "Response B"
 #-----------------------------------------------
 if __name__ == '__main__':
