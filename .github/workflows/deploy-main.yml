@@ -8,6 +8,8 @@ jobs:
   deploy-blue-green:
     runs-on: self-hosted
 
+    env:
+      ROOT_DIR: ${{secrets.PROJECT_ROOT}}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -108,9 +110,9 @@ jobs:
               Write-Error "CRITICAL: nginx-proxy container is not running!"
               exit 1
           }
-
+          $ProjectRoot = $Env:ROOT_DIR
+          $DestFile = Join-Path $ProjectRoot "nginx\myapp.conf"
           $SourceFile = "nginx\templates\$TargetColor.conf"
-          $DestFile = "C:\Users\answn\workspace\cicd_practice\nginx\myapp.conf"
           
           Write-Host "    Copying Config: $SourceFile -> $DestFile"
           Copy-Item -Path $SourceFile -Destination $DestFile -Force
