@@ -14,165 +14,76 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 1. 네트워크 생성 (이미 있으면 에러 안나게 처리)
-      - name: Create Network
+      # 1. Network Setup
+      - name: 1. Create Network
         run: |
           if (-not (docker network ls -q -f name=test-net)) {
             docker network create test-net
           }
 
-      # 2. 서버용 이미지 빌드 (로그 확인을 위해 에러 무시 없음)
-      - name: Build Production Image
-        run: docker build --target production -t my-app:prod -f app/Dockerfile .
-
-      # 3. [확인] 이미지가 진짜 만들어졌는지 확인
-      - name: Check Built Images
-        run: docker images my-app
-
-      # 4. 테스트 러너 이미지 빌드
-      - name: Build Test Runner Image
-        run: docker build --target test-image -t my-app:tester -f app/Dockerfile .
-
-      # 5. [중요] 앱 컨테이너 실행 (에러 숨기기 제거!)
-      # 여기서 에러가 나면 바로 멈추고 이유를 알려줄 겁니다.
-      - name: Run App Container
+      # 2. Build Images (Production & Tester)
+      - name: 2. Build Images
         run: |
+          Write-Host "Building Production image..."
+          docker build --target production -t my-app:prod -f app/Dockerfile .
+          
+          Write-Host "Building Tester image..."
+          docker build --target test-image -t my-app:tester -f app/Dockerfile .
 
-          # 켜져있는 컨테이너 목록에 app-test 있는지 검사
-          if (docker ps -q -f name=app-test) { 
-              Write-Host "    Found pre-existing app-test active..."
-              Write-Host "    Removing pre-existing app-test..."
-              docker stop app-test
-              docker rm   app-test
-          }
-
-          # 꺼져있는 컨테이너 목록에 app-test 있는지 검사
-          if (docker ps -a -q -f name=app-test) {
-            Write-Host "    Found pre-existing app-test inactive..."
-            Write-Host "    Removing pre-existing app-test..."
-            docker rm app-test
-          }
-
-          docker run -d --name app-test --network test-net -p 5005:5000 my-app:prod
-      # 6. 서버 대기
-      - name: Wait and Check App Health
+      # 3. Run Test App (Port 5005)
+      - name: 3. Run Test Container
         run: |
-          $Retries = 0
-          $Success = $false
-          $TargetPort = "5005" # ci-stage.yml에서 설정한 호스트 포트
-
-          while ($Retries -lt 10) {
-            try {
-              $Response = Invoke-WebRequest -Uri "http://localhost:${TargetPort}/core" -UseBasicParsing
-              if ($Response.StatusCode -eq 200) {
-                Write-Host "    Test-Container is Ready !!!!"
-                $Success = $true
-                break
-              }
-            } catch {
-              Write-Host "    Waiting for container... ($($Retries + 1)/10)"
-              Start-Sleep -Seconds 3
-              $Retries++
-            }
+          $Name = "app-test"
+          if (docker ps -a -q -f name=$Name) { 
+              Write-Host "Stopping existing $Name gracefully..."
+              docker stop $Name
+              docker rm $Name 
           }
+          
+          Write-Host "Launching $Name for testing..."
+          docker run -d --name $Name --network test-net -p 5005:5000 my-app:prod
 
-          if (-not $Success) {
-            Write-Error "Test failed to start in time."
-            docker logs app-test
-            exit 1
-          }
-      # 7. 상태 확인 (이제는 확실히 보일 겁니다)
-      - name: Check App Logs
-        if: always()
-        run: |
-          docker ps -a
-          docker logs app-test
+      # 4. Health Check (Using the new script!)
+      - name: 4. Verify Test App Health
+        run: .\scripts\check-health.ps1 -Port 5005
 
-      # 8. 테스트 실행
-      - name: Run Tests
+      # 5. Run Functional Tests
+      - name: 5. Execute Automated Tests
         run: |
           docker run --rm --network test-net `
             -e App_URL="http://app-test:5000" `
             my-app:tester
 
-      # 9. 뒷정리
-      - name: Cleanup
-        if: success() # Clean Container only when the CI was successful
+      # 6. Cleanup Test Environment
+      - name: 6. Cleanup Test Container
+        if: always()
         run: |
-          # 켜져있는 컨테이너 목록에 app-test 있는지 검사
-          if (docker ps -q -f name=app-test) { 
-              Write-Host "    Found pre-existing app-test active..."
-              Write-Host "    Removing pre-existing app-test..."
+          if (docker ps -a -q -f name=app-test) { 
               docker stop app-test
-              docker rm   app-test
+              docker rm app-test 
           }
 
-          # 꺼져있는 컨테이너 목록에 app-test 있는지 검사
-          if (docker ps -a -q -f name=app-test) {
-            Write-Host "    Found pre-existing app-test inactive..."
-            Write-Host "    Removing pre-existing app-test..."
-            docker rm app-test
-          }
       # ----------------------------------------------------------------
-      # [Phase 2] 스테이징 배포 (테스트 통과 시에만 실행!)
+      # Phase 2: Deploy to Staging (Only if tests passed)
       # ----------------------------------------------------------------
-
-      # 10. 사람이 들어갈 서버 띄우기 (Port 5003)
-      # 위 단계(Run Automated Tests)가 실패하면 이 단계는 실행되지 않음 (GitHub Actions 기본 동작)
-      - name: Deploy to Staging
+      - name: 7. Deploy to Staging Environment (Port 5003)
         run: |
-          # 기존에 켜져있던 스테이징 서버가 있다면 내리고 교체 (업데이트) 
-          Write-Host "Integration Completed! Deploying to Staging Environment..."
+          $Name = "app-stage"
+          Write-Host "Tests passed! Updating Staging server..."
           
-          Write-Host "    Checking if app-stage already exists..."
-
-          # 켜져있는 컨테이너 목록에 app-stage 있는지 검사
-          if (docker ps -q -f name=app-stage) {
-              Write-Host "    Found pre-existing app-stage active..."
-              Write-Host "    Removing pre-existing app-stage..."
-              docker stop app-stage
-              docker rm app-stage
+          if (docker ps -a -q -f name=$Name) {
+              Write-Host "Stopping current staging server gracefully..."
+              docker stop $Name
+              docker rm $Name
           }
 
-          # 꺼져있는 컨테이너 목록에 app-stage 있는지 검사
-          if (docker ps -a -q -f name=app-stage) {
-            Write-Host "    Found pre-existing app-stage inactive..."
-            Write-Host "    Removing pre-existing app-stage..."
-            docker rm app-stage
-          }
-
-          # 스테이징 서버 실행 (5003번 포트 사용!)
-          # -d: 백그라운드 실행 (계속 켜져 있음)
-          # --restart always: 혹시 죽으면 다시 살려라
-          docker run -d --name app-stage `
+          docker run -d --name $Name `
             --network test-net `
             -p 5003:5000 `
             -e Page_Title="On-Stage Server" `
             --restart always `
             my-app:prod
-          
-          $Retries = 0
-          $Success = $false
-          $TargetPort = "5003"
 
-          while ($Retries -lt 10) {
-            try {
-              $Response = Invoke-WebRequest -Uri "http://localhost:${TargetPort}/core" -UseBasicParsing
-              if ($Response.StatusCode -eq 200) {
-                Write-Host "    Staging App is Ready !!!!"
-                $Success = $true
-                break
-              }
-            } catch {
-              Write-Host "    Waiting for Staging Server... ($($Retries + 1)/10)"
-              Start-Sleep -Seconds 3
-              $Retries++
-            }
-          }
-
-          if (-not $Success) {
-            Write-Error "    FAILED to deploy Staging App"
-            exit 1
-          }
-          
-          Write-Host "Staging Server is Live at http://localhost:5003"
+      # 8. Final Health Check for Stage
+      - name: 8. Verify Staging Health
+        run: .\scripts\check-health.ps1 -Port 5003
