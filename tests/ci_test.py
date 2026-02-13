@@ -10,7 +10,7 @@ It will be replaced with http://app-test:5000 in docker network
 APP_URL = os.environ.get("App_URL", "URL_TO_BE_REPLACED")
 
 def test_core_button():
-    response = requests.get(f"{APP_URL}/core")ㄴ
+    response = requests.get(f"{APP_URL}/core")
     assert response.status_code == 200
     assert "Success" in response.text
 
