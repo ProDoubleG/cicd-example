@@ -35,10 +35,11 @@ def legacy_feature():
 # #-----------------------------------------------
 
 #------------- Scenario C ---------------------
-@app.route('/new-feature')
-def new_feature():
-    return "Response B"
+# @app.route('/new-feature')
+# def new_feature():
+#     return "Response B"
 #-----------------------------------------------
+
 if __name__ == '__main__':
     # 5000번 포트에서 실행, 외부 접속 허용(0.0.0.0)
     app.run(host='0.0.0.0', port=5000)
