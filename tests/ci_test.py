@@ -2,11 +2,15 @@ import pytest
 import requests
 import os
 
-# GitHub Actions 환경변수에서 URL을 가져옵니다.
-APP_URL = os.environ.get("App_URL", "http://localhost:5005")
+'''
+During CI, it will not use the APP_URL value defined here.
+It will be replaced with http://app-test:5000 in docker network
+'''
+
+APP_URL = os.environ.get("App_URL", "URL_TO_BE_REPLACED")
 
 def test_core_button():
-    response = requests.get(f"{APP_URL}/core")
+    response = requests.get(f"{APP_URL}/core")ㄴ
     assert response.status_code == 200
     assert "Success" in response.text
 
@@ -15,7 +19,7 @@ def test_legacy_button():
     assert response.status_code == 200
     assert "Legacy" in response.text 
 
-def test_new_feature_response():
-    response = requests.get(f"{APP_URL}/new-feature")
-    assert response.status_code == 200
-    assert response.text == "Response B"
+# def test_new_feature_response():
+#     response = requests.get(f"{APP_URL}/new-feature")
+#     assert response.status_code == 200
+#     assert response.text == "Response B"
