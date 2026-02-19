@@ -28,9 +28,11 @@ cicd-example/
 └── README.md                 # Project documentation and guide
 ```
 
-# 🏗️ Architecture Overview 
+# 🏗️ Architecture Overview
 
 Take a look at the diagram below. This is the local deployment environment we will be building on your machine: 
+
+![Architecture Diagram](picture.png)
 
 The User connects through Port 80, where our NGINX reverse proxy sits. 
 
