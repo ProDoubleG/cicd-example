@@ -1,4 +1,5 @@
 import os
+import time
 from flask import Flask, render_template
 
 app = Flask(__name__)
@@ -11,6 +12,9 @@ def home():
     page_title = os.getenv("Page_Title", "CICD Practice")
     return render_template('index.html', title=page_title)
 
+@app.route('/version')
+def get_version():
+    return APP_VERSION
 
 @app.route('/core')
 def core_function():

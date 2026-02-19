@@ -57,7 +57,7 @@ jobs:
           docker run -d --name $ContainerName `
             --network myapp-net `
             -p "${Port}:5000" `
-            -e Page_Title="Production Server ($Color)" `
+            -e Page_Title="Deployment Server ($Color)" `
             --restart always `
             my-app:deploy
 
