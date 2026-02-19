@@ -54,7 +54,7 @@ jobs:
         run: |
           docker run --rm --network myapp-net `
             -e App_URL="http://app-test:5000" `
-            my-app:tester
+            my-app:test
 
       # 6. Cleanup Test Environment
       - name: 6. Cleanup Test Container
