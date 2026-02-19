@@ -4,6 +4,7 @@ from flask import Flask, render_template
 
 app = Flask(__name__)
 core_response = "Success"
+APP_VERSION = str(time.time())
 
 @app.route('/')
 def home():
