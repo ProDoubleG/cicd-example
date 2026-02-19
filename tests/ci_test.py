@@ -19,7 +19,7 @@ def test_legacy_button():
     assert response.status_code == 200
     assert "Legacy" in response.text 
 
-def test_new_feature_response():
-    response = requests.get(f"{APP_URL}/new-feature")
-    assert response.status_code == 200
-    assert response.text == "Response B"
+# def test_new_feature_response():
+#     response = requests.get(f"{APP_URL}/new-feature")
+#     assert response.status_code == 200
+#     assert response.text == "Response B"
