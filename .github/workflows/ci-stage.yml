@@ -43,9 +43,9 @@ jobs:
           }
           
           Write-Host "Launching $Name for testing..."
-          docker run -d --name $Name --network myapp-net -p 5005:5000 my-app:test
+          docker run -d --name $Name --network myapp-net -p 5005:5000 my-app:stage
 
-      # 4. Health Check (Using the new script!)
+      # 4. Health Check
       - name: 4. Verify Test App Health
         run: .\scripts\check-health.ps1 -Port 5005
 
