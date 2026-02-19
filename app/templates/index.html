@@ -7,7 +7,7 @@
     <h1>{{ title }}</h1>
     <button onclick="fetchData('/core')">Core Function</button>
     <button onclick="fetchData('/legacy')">Legacy Feature</button>
-    <button onclick="fetchData('/new-feature')">New Feature</button>
+    <!-- <button onclick="fetchData('/new-feature')">New Feature</button> -->
     
     <h3 id="result">Result will appear here</h3>
 
@@ -15,7 +15,6 @@
         function fetchData(endpoint) {
             fetch(endpoint)
                 .then(response => {
-                    // 시나리오 1번(Fail) 환경에서 에러 발생 시 처리
                     if (!response.ok) return response.text().then(t => { throw new Error(t) });
                     return response.text();
                 })
@@ -24,7 +23,6 @@
                     document.getElementById('result').style.color = "black";
                 })
                 .catch(err => {
-                    // 에러 발생 시 빨간색으로 표시 (시나리오 1번 강조용)
                     document.getElementById('result').innerText = "Error: " + err.message;
                     document.getElementById('result').style.color = "red";
                 });

@@ -17,18 +17,20 @@ jobs:
       # 1. Network Setup
       - name: 1. Create Network
         run: |
-          if (-not (docker network ls -q -f name=test-net)) {
-            docker network create test-net
+          if (-not (docker network ls -q -f name=myapp-net)) {
+            docker network create myapp-net
           }
 
       # 2. Build Images (Production & Tester)
+      # my-app:stage and my-app:deploy is actually same image with different tag
+      # but just to avoid confusion, the tag names were differentiated
       - name: 2. Build Images
         run: |
-          Write-Host "Building Production image..."
-          docker build --target production -t my-app:prod -f app/Dockerfile .
-          
           Write-Host "Building Tester image..."
-          docker build --target test-image -t my-app:tester -f app/Dockerfile .
+          docker build --target deploy-image -t my-app:stage -f app/Dockerfile .
+
+          Write-Host "Building Tester image..."
+          docker build --target test-image -t my-app:test -f app/Dockerfile .
 
       # 3. Run Test App (Port 5005)
       - name: 3. Run Test Container
@@ -41,7 +43,7 @@ jobs:
           }
           
           Write-Host "Launching $Name for testing..."
-          docker run -d --name $Name --network test-net -p 5005:5000 my-app:prod
+          docker run -d --name $Name --network myapp-net -p 5005:5000 my-app:prod
 
       # 4. Health Check (Using the new script!)
       - name: 4. Verify Test App Health
@@ -50,7 +52,7 @@ jobs:
       # 5. Run Functional Tests
       - name: 5. Execute Automated Tests
         run: |
-          docker run --rm --network test-net `
+          docker run --rm --network myapp-net `
             -e App_URL="http://app-test:5000" `
             my-app:tester
 
@@ -63,9 +65,9 @@ jobs:
               docker rm app-test 
           }
 
-      # ----------------------------------------------------------------
-      # Phase 2: Deploy to Staging (Only if tests passed)
-      # ----------------------------------------------------------------
+      #######################################################################
+      ########## Phase 2: Deploy to Staging (Only if tests passed) ##########
+      #######################################################################
       - name: 7. Deploy to Staging Environment (Port 5003)
         run: |
           $Name = "app-stage"
@@ -78,11 +80,11 @@ jobs:
           }
 
           docker run -d --name $Name `
-            --network test-net `
+            --network myapp-net `
             -p 5003:5000 `
             -e Page_Title="On-Stage Server" `
             --restart always `
-            my-app:prod
+            my-app:stage
 
       # 8. Final Health Check for Stage
       - name: 8. Verify Staging Health
