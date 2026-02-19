@@ -5,27 +5,32 @@ Write-Host "Starting Infrastructure Setup..."
 
 # 1. Create Network
 # Ensuring the internal communication channel exists.
-if (-not (docker network ls -q -f name=test-net)) {
-    docker network create test-net
-    Write-Host "Network 'test-net' created."
+if (-not (docker network ls -q -f name=myapp-net)) {
+    docker network create myapp-net
+    Write-Host "Network 'myapp-net' created."
 }
 
 # 2. Check/Build Image
-# We need the production image to launch the initial app.
-if (-not (docker images -q my-app:prod)) {
-    Write-Host "Image 'my-app:prod' not found. Building it now..."
-    docker build --target production -t my-app:prod -f app/Dockerfile .
+# Assuming there is already running app on deployment, we will run inital app
+# We need the Deployment image to launch the initial app.
+# Nginx switch needs a running app for target or it will not start
+if (-not (docker images -q my-app:deploy)) {
+    Write-Host "Image 'my-app:deploy' not found. Building it now..."
+
+    $ProjectRoot = "$PSScriptRoot\.."
+
+    docker build --target deploy-image -t my-app:deploy -f "$ProjectRoot\app\Dockerfile" $ProjectRoot
 }
 
 # 3. Determine Active App (Blue vs Green)
-$ConfPath = "$PSScriptRoot\..\nginx\myapp.conf" # Adjust path if needed
+$ConfPath = "$PSScriptRoot\..\nginx\myapp.conf.template" # Adjust path if needed
 $TargetContainer = "app-blue"
 $TargetPort = "5001"
 
-if (-not (Test-Path $ConfPath)) {
-    Write-Host "Config file not found. Creating a default one (Blue)..."
-    Copy-Item "$PSScriptRoot\..\nginx\templates\blue.conf" -Destination $ConfPath
-}
+# if (-not (Test-Path $ConfPath)) {
+#     Write-Host "Config file not found. Creating a default one (Blue)..."
+#     Copy-Item "$PSScriptRoot\..\nginx\templates\blue.conf" -Destination $ConfPath
+# }
 
 $ConfContent = Get-Content $ConfPath -Raw
 if ($ConfContent -match "app-green") {
@@ -44,11 +49,11 @@ if (docker ps -a -q -f name=$TargetContainer) {
 
 Write-Host "Starting '$TargetContainer'..."
 docker run -d --name $TargetContainer `
-    --network test-net `
+    --network myapp-net `
     -p "${TargetPort}:5000" `
     -e Page_Title="Initial App ($TargetContainer)" `
     --restart always `
-    my-app:prod
+    my-app:deploy
 
 # 5. Wait for App to be Ready
 & "$PSScriptRoot\check-health.ps1" -Port $TargetPort
@@ -73,9 +78,9 @@ if (docker ps -q -f name=$NginxName) {
 # 7. Start Nginx Proxy
 Write-Host "Starting 'nginx-proxy' with Template..."
 
-# Nginx will receive TARGETContainer by -e option on docker run 
+# Nginx will receive TARGET Container by -e option on docker run 
 docker run -d --name $NginxName `
-    --network test-net `
+    --network myapp-net `
     -p 80:80 `
     -p 5004:5000 `
     -e TARGET="$TargetContainer" `

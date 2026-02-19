@@ -20,7 +20,7 @@ CMD ["pytest", "-v", "/tests/ci_test.py"]
 
 # IMAGE for my-app:prod
 # The app from this image will be hosted on hostmachine
-FROM base as production
+FROM base as deploy-image
 
 WORKDIR /app
 CMD ["python", "main.py"]
