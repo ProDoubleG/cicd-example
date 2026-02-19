@@ -43,7 +43,7 @@ jobs:
           }
           
           Write-Host "Launching $Name for testing..."
-          docker run -d --name $Name --network myapp-net -p 5005:5000 my-app:prod
+          docker run -d --name $Name --network myapp-net -p 5005:5000 my-app:test
 
       # 4. Health Check (Using the new script!)
       - name: 4. Verify Test App Health
