@@ -32,7 +32,7 @@ jobs:
           Write-Host "Building Tester image..."
           docker build --target test-image -t my-app:test -f app/Dockerfile .
 
-      # 3. Run Test App (Port 5005)
+      # 3. Run Test App (Port 5004)
       - name: 3. Run Test Container
         run: |
           $Name = "app-test"
@@ -43,11 +43,11 @@ jobs:
           }
           
           Write-Host "Launching $Name for testing..."
-          docker run -d --name $Name --network myapp-net -p 5005:5000 my-app:stage
+          docker run -d --name $Name --network myapp-net -p 5004:5000 my-app:stage
 
       # 4. Health Check
       - name: 4. Verify Test App Health
-        run: .\scripts\check-health.ps1 -Port 5005
+        run: .\scripts\check-health.ps1 -Port 5004
 
       # 5. Run Functional Tests
       - name: 5. Execute Automated Tests

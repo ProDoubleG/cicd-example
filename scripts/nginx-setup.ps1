@@ -27,11 +27,6 @@ $ConfPath = "$PSScriptRoot\..\nginx\myapp.conf.template" # Adjust path if needed
 $TargetContainer = "app-blue"
 $TargetPort = "5001"
 
-# if (-not (Test-Path $ConfPath)) {
-#     Write-Host "Config file not found. Creating a default one (Blue)..."
-#     Copy-Item "$PSScriptRoot\..\nginx\templates\blue.conf" -Destination $ConfPath
-# }
-
 $ConfContent = Get-Content $ConfPath -Raw
 if ($ConfContent -match "app-green") {
     Write-Host "Config points to GREEN."
@@ -82,14 +77,14 @@ Write-Host "Starting 'nginx-proxy' with Template..."
 docker run -d --name $NginxName `
     --network myapp-net `
     -p 80:80 `
-    -p 5004:5000 `
+    -p 5005:5000 `
     -e TARGET="$TargetContainer" `
     --restart always `
     -v "${PSScriptRoot}\..\nginx\myapp.conf.template:/etc/nginx/templates/default.conf.template" `
     nginx:alpine
 
 # 8. Final Verification
-& "$PSScriptRoot\check-health.ps1" -Port 5004 -Endpoint "status"
+& "$PSScriptRoot\check-health.ps1" -Port 5005 -Endpoint "status"
 
 Write-Host "------------------------------------------------"
 Write-Host "Infrastructure Setup Complete!"

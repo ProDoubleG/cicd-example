@@ -14,9 +14,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 1. Check if Nginx is Online (Port 5004, Endpoint status)
+      # 1. Check if Nginx is Online (Port 5005, Endpoint status)
       - name: 1. Pre-flight Check (Nginx Health)
-        run: .\scripts\check-health.ps1 -Port 5004 -Endpoint "status"
+        run: .\scripts\check-health.ps1 -Port 5005 -Endpoint "status"
 
       # 2. Build image for app deployment
       - name: 2. Build and Tag Deployment Image
